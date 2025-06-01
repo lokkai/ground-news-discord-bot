@@ -18,9 +18,27 @@ from dotenv import load_dotenv
 from collections import defaultdict
 import subprocess
 from pathlib import Path
+from email.utils import parsedate_to_datetime
+import dateutil.parser  # Added for better date parsing
+
+# Timezone mapping for abbreviations
+TIMEZONE_MAP = {
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+    "GMT": "GMT",
+    "UTC": "UTC",
+    "AEST": "Australia/Sydney",
+    "AEDT": "Australia/Sydney"
+}
 
 # Check and install missing dependencies
-required_libraries = ['pytz', 'colorama']
+required_libraries = ['pytz', 'colorama', 'python-dateutil']
 for lib in required_libraries:
     try:
         __import__(lib)
@@ -40,7 +58,7 @@ USER_SETTINGS_FILE = 'user_settings.json'
 
 # Download required NLTK data
 def download_nltk_resources():
-    resources = ['punkt', 'stopwords']
+    resources = ['punkt', 'stopwords', 'punkt_tab']  # Added punkt_tab
     for resource in resources:
         try:
             nltk.data.find(resource)
@@ -72,7 +90,11 @@ def load_user_settings():
     if Path(USER_SETTINGS_FILE).exists():
         try:
             with open(USER_SETTINGS_FILE, 'r') as f:
-                return json.load(f)
+                settings = json.load(f)
+                # Convert timezone abbreviation to full name if needed
+                tz = settings['timezone']
+                settings['timezone'] = TIMEZONE_MAP.get(tz, tz)
+                return settings
         except Exception as e:
             logger.error(f"Error loading user settings: {str(e)}")
     return None
@@ -122,7 +144,7 @@ def get_user_settings():
             if choice.isdigit():
                 index = int(choice) - 1
                 if 0 <= index < len(tz_options):
-                    timezone = tz_options[index]
+                    timezone = TIMEZONE_MAP[tz_options[index]]
                     break
                 print("Invalid number. Please try again.")
             else:
@@ -357,18 +379,35 @@ class NewsBot(discord.Client):
         clean = re.compile('<.*?>')
         return re.sub(clean, '', text).strip()[:1000]  # Limit to 1000 characters
     
-    def format_datetime(self, dt):
-        """Format datetime to user's timezone"""
-        if not isinstance(dt, datetime):
+    def format_datetime(self, dt_str):
+        """Parse and format datetime string to user's timezone"""
+        try:
+            # Try RSS format first
+            dt = parsedate_to_datetime(dt_str)
+        except (ValueError, TypeError):
             try:
-                dt = datetime.fromisoformat(dt)
+                # Try ISO format
+                dt = datetime.fromisoformat(dt_str)
             except (ValueError, TypeError):
-                return dt
+                try:
+                    # Use dateutil parser as fallback
+                    dt = dateutil.parser.parse(dt_str)
+                except Exception:
+                    return dt_str  # Return original if all parsing fails
         
-        # Convert to user's timezone
+        # Ensure datetime is timezone-aware
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
-        return dt.astimezone(self.timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
+        
+        # Convert to user's timezone
+        local_dt = dt.astimezone(self.timezone)
+        
+        # Format with timezone abbreviation and UTC offset
+        tz_abbr = local_dt.strftime('%Z')
+        utc_offset = local_dt.strftime('%z')
+        formatted_offset = f"{utc_offset[:3]}:{utc_offset[3:]}"
+        
+        return f"{local_dt.strftime('%Y-%m-%d %H:%M:%S')} {tz_abbr} (UTC{formatted_offset})"
     
     def display_intro(self):
         """Display enhanced professional ASCII art intro with color and animations"""
@@ -505,16 +544,17 @@ class NewsBot(discord.Client):
                         self.posted_titles[normalized_title] = datetime.utcnow().isoformat()
                         new_count += 1
                         
-                        # Format the message
-                        message = f"**{title}**\n\n"  # Article title as headline
+                        # Format the message with BREAKING NEWS header
+                        message = "🚨 **BREAKING NEWS** 🚨\n\n"
+                        message += f"**{title}**\n\n"
                         
                         # Add publication date with timezone conversion
                         if 'published' in entry:
                             pub_date = self.format_datetime(entry.published)
-                            message += f"*Published: {pub_date}*\n\n"
+                            message += f"🗓️ *Your Local Time: {pub_date}*\n\n"
                         elif 'updated' in entry:
                             pub_date = self.format_datetime(entry.updated)
-                            message += f"*Updated: {pub_date}*\n\n"
+                            message += f"🗓️ *Your Local Time: {pub_date}*\n\n"
                         
                         # Get article content
                         article_content = self.get_description(entry)
@@ -540,7 +580,7 @@ class NewsBot(discord.Client):
                             # Handle message length issues
                             if "Must be 2000 or fewer" in str(e):
                                 # Fallback to minimal message
-                                minimal_msg = f"**{title}**\n\nRead more: {article_url}"
+                                minimal_msg = f"🚨 **BREAKING NEWS** 🚨\n\n**{title}**\n\nRead more: {article_url}"
                                 await channel.send(minimal_msg)
                                 logger.info("✅ Posted minimal version")
                             else:
