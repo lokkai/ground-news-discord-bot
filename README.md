@@ -1,19 +1,23 @@
 # 🚀 GROUND NEWS DISCORD BOT
 **Automated News Aggregation from Ground News to Discord Channels**  
-*Version 2.1 | Developed by Jordan Ilaréguy*
+*Version 2.2 | Developed by Jordan Ilaréguy*
 
 ---
 
-## 🔥 KEY FEATURES
+## 🔥 ENHANCED FEATURES
+- **Personalized User Experience**: Saves name/timezone preferences between sessions
+- **Professional Console Interface**: Enhanced ASCII art intro with animations
 - **Real-time RSS Monitoring**: Checks Ground News feed every 5 minutes
-- **Smart Duplicate Detection**: Blocks reposts using URL matching and title similarity (85% threshold)
-- **Enhanced Summarization**: Detailed 5-sentence summaries using TF-IDF algorithm
-- **Persistent History**: Remembers posted articles between sessions using JSON files
-- **Professional Logging**: Detailed console output and `bot.log` file for troubleshooting
-- **Secure Credential Management**: Uses .env file to protect Discord tokens
-- **Optimized Formatting**: Clean Discord message formatting with publication dates
-- **Automatic Cleanup**: Removes old titles after 24 hours to prevent false positives
-- **Professional Console Interface**: Real-time status display and countdown timer
+- **Advanced Summarization**: 5-sentence summaries using TF-IDF algorithm
+- **Smart Duplicate Detection**: URL normalization + title similarity (85% threshold)
+- **Time Zone Conversion**: Automatic date conversion to user's local time
+- **Persistent History**: Remembers posted articles between sessions
+- **Self-Healing System**: Automatic dependency installation
+- **Professional Logging**: Detailed console output + `bot.log` file
+- **Automatic Cleanup**: Removes old titles after 24 hours
+- **Optimized Formatting**: Clean Discord messages with publication dates
+- **Error-Resistant Design**: Graceful handling of API failures
+- **Dynamic Countdown Timer**: Real-time fetch countdown in console
 
 ---
 
@@ -63,11 +67,14 @@ RUN THE BOT:
 - python ground-news-discord-bot.py
 
 FIRST RUN EXPECTATIONS
-- You'll see a professional ASCII art intro in the console
-- The bot will download required NLP resources (first run only)
-- The bot will display: "Starting Ground News Bot..."
-- In Discord, the bot will send: "📰 Ground News Bot Activated! Monitoring news feed..."
-- New articles will automatically appear with detailed summaries
+
+- Professional ASCII art intro with animations
+- Personalized welcome prompt (name/timezone)
+- Automatic NLTK resource download
+- Dependency auto-installation (if missing)
+- Persistent settings creation
+- Real-time status dashboard
+- Countdown timer to next fetch
 
 ---
 
