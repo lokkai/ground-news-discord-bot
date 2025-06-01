@@ -7,8 +7,7 @@
 ## 🔥 KEY FEATURES
 - **Real-time RSS Monitoring**: Checks Ground News feed every 5 minutes
 - **Smart Duplicate Detection**: Blocks reposts using URL matching and title similarity (85% threshold)
-- **Advanced Text Analysis**: Detects political bias, sentiment, and verifiable claims
-- **Automatic Summarization**: Generates concise summaries using TF-IDF algorithm
+- **Enhanced Summarization**: Detailed 5-sentence summaries using TF-IDF algorithm
 - **Persistent History**: Remembers posted articles between sessions using JSON files
 - **Professional Logging**: Detailed console output and `bot.log` file for troubleshooting
 - **Secure Credential Management**: Uses .env file to protect Discord tokens
@@ -68,7 +67,7 @@ FIRST RUN EXPECTATIONS
 - The bot will download required NLP resources (first run only)
 - The bot will display: "Starting Ground News Bot..."
 - In Discord, the bot will send: "📰 Ground News Bot Activated! Monitoring news feed..."
-- New articles will automatically appear with summaries and analysis
+- New articles will automatically appear with detailed summaries
 
 ---
 
@@ -82,14 +81,12 @@ TITLE SIMILARITY THRESHOLD (0.80-0.95 RECOMMENDED)
 
 SUMMARIZATION SETTING
 - self.summarization_enabled = True  # Enable/disable auto-summarization
+- num_sentences=5  # Number of sentences in summary (configurable in code)
 
 MESSAGE FORMAT
 - Article title as main header
 - Publication date
-- AI-generated summary
-- Political bias analysis
-- Fact-check indicator
-- Sentiment analysis
+- Detailed 5-sentence summary
 - Direct article link
 
 ---
@@ -143,14 +140,8 @@ DETAILED ERROR CHECKING
 
 ❓ FREQUENTLY ASKED QUESTIONS
 
-Q: What analysis does the bot perform?
-A: Three types of analysis:
-   - Political Bias: Left/Center/Right percentage
-   - Fact-Checking: Flags verifiable claims
-   - Sentiment: Positive/Negative/Neutral
-
 Q: How does summarization work?
-A: Uses TF-IDF algorithm to extract key sentences while preserving meaning.
+A: Uses TF-IDF algorithm to extract 5 key sentences while preserving meaning.
 
 Q: How often does the bot check for new articles?
 A: Every 5 minutes by default (configurable in code).
