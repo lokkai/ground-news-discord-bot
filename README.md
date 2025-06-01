@@ -24,7 +24,7 @@
 ## 🛠 COMPLETE SETUP GUIDE
 
 ### STEP 1: INSTALL PYTHON PACKAGES
-# Open Command Prompt or PowerShell and run:
+Open Command Prompt or PowerShell and run:
 - pip install discord.py feedparser python-dotenv aiohttp
 
 ### STEP 2: CREATE DISCORD BOT
@@ -51,7 +51,7 @@
 
 ---
 
-🚀 RUNNING THE BOT
+# 🚀 RUNNING THE BOT
 
 WINDOWS INSTRUCTIONS
 - Open the folder containing the bot files
@@ -68,24 +68,23 @@ FIRST RUN EXPECTATIONS
 
 ---
 
-⚙️ CONFIGURATION OPTIONS
-- Customize these settings in ground-news-discord-bot.py:
+# ⚙️ CONFIGURATION OPTIONS
 
-# HOW OFTEN TO CHECK FOR NEWS (SECONDS)
+HOW OFTEN TO CHECK FOR NEWS (SECONDS)
 - self.fetch_interval = 300  # 5 minutes (default)
 
-# TITLE SIMILARITY THRESHOLD (0.80-0.95 RECOMMENDED)
+TITLE SIMILARITY THRESHOLD (0.80-0.95 RECOMMENDED)
 - self.title_similarity_threshold = 0.85  # 85% similarity blocks duplicates
 
-# MESSAGE FORMATTING TEMPLATE
+MESSAGE FORMATTING TEMPLATE
 - message = f"**🚨 GROUND NEWS • BREAKING NEWS**\n"
 - message += f"**{title}**\n\n"
 
 ---
 
-🐛 TROUBLESHOOTING GUIDE
+# 🐛 TROUBLESHOOTING GUIDE
 
-SYMPTOMS
+SYMPTOMS:
 
 "CHANNEL NOT FOUND" ERROR
 1. Verify CHANNEL_ID in .env
