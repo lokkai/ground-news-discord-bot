@@ -19,7 +19,8 @@ from collections import defaultdict
 import subprocess
 from pathlib import Path
 from email.utils import parsedate_to_datetime
-import dateutil.parser  # Added for better date parsing
+import dateutil.parser
+from bs4 import BeautifulSoup  # Added for HTML parsing
 
 # Timezone mapping for abbreviations
 TIMEZONE_MAP = {
@@ -38,7 +39,7 @@ TIMEZONE_MAP = {
 }
 
 # Check and install missing dependencies
-required_libraries = ['pytz', 'colorama', 'python-dateutil']
+required_libraries = ['pytz', 'colorama', 'python-dateutil', 'beautifulsoup4']
 for lib in required_libraries:
     try:
         __import__(lib)
@@ -58,13 +59,13 @@ USER_SETTINGS_FILE = 'user_settings.json'
 
 # Download required NLTK data
 def download_nltk_resources():
-    resources = ['punkt', 'stopwords', 'punkt_tab']  # Added punkt_tab
+    resources = ['punkt', 'stopwords', 'punkt_tab']
     for resource in resources:
         try:
             nltk.data.find(resource)
         except LookupError:
             print(f"Downloading NLTK resource: {resource}")
-            nltk.download(resource, quiet=False)  # Show download progress
+            nltk.download(resource, quiet=False)
 
 # Call the download function immediately
 download_nltk_resources()
@@ -91,7 +92,6 @@ def load_user_settings():
         try:
             with open(USER_SETTINGS_FILE, 'r') as f:
                 settings = json.load(f)
-                # Convert timezone abbreviation to full name if needed
                 tz = settings['timezone']
                 settings['timezone'] = TIMEZONE_MAP.get(tz, tz)
                 return settings
@@ -148,7 +148,6 @@ def get_user_settings():
                     break
                 print("Invalid number. Please try again.")
             else:
-                # Validate custom time zone
                 if choice in pytz.all_timezones:
                     timezone = choice
                     break
@@ -168,32 +167,23 @@ class FreeTextSummarizer:
     
     def preprocess(self, text):
         """Tokenize and clean text"""
-        # Tokenize text
         words = nltk.word_tokenize(text.lower())
-        
-        # Remove stopwords and punctuation
         words = [word for word in words if word.isalnum() and word not in self.stop_words]
-        
-        # Stem words
         words = [self.stemmer.stem(word) for word in words]
-        
         return words
     
     def calculate_sentence_scores(self, sentences):
         """Calculate TF-IDF scores for sentences"""
-        # Calculate word frequencies
         word_freq = defaultdict(int)
         for sentence in sentences:
             for word in sentence:
                 word_freq[word] += 1
         
-        # Calculate IDF values
         idf_values = {}
         total_sentences = len(sentences)
         for word, freq in word_freq.items():
             idf_values[word] = math.log(total_sentences / (1 + freq))
         
-        # Calculate sentence scores
         sentence_scores = {}
         for i, sentence in enumerate(sentences):
             score = 0
@@ -204,30 +194,20 @@ class FreeTextSummarizer:
         
         return sentence_scores
     
-    def summarize(self, text, num_sentences=5):  # Increased to 5 sentences
+    def summarize(self, text, num_sentences=5):
         """Generate summary from text"""
         try:
-            # Split text into sentences
             sentences = nltk.sent_tokenize(text)
-            
-            # Skip if too few sentences
             if len(sentences) < 2:
                 return None
                 
-            # Preprocess each sentence
             preprocessed_sentences = [self.preprocess(sent) for sent in sentences]
-            
-            # Calculate sentence scores
             sentence_scores = self.calculate_sentence_scores(preprocessed_sentences)
-            
-            # Select top sentences
             top_sentences = heapq.nlargest(
                 num_sentences, 
                 sentence_scores, 
                 key=sentence_scores.get
             )
-            
-            # Return summary in original order
             summary_sentences = [sentences[i] for i in sorted(top_sentences)]
             return " ".join(summary_sentences)
         
@@ -249,6 +229,7 @@ class NewsBot(discord.Client):
         self.summarizer = FreeTextSummarizer()
         self.user_settings = user_settings
         self.timezone = pytz.timezone(user_settings['timezone'])
+        self.debug_mode = True  # Enable debug logging for time conversion
 
     def load_posted_articles(self):
         """Load posted articles from file"""
@@ -288,13 +269,9 @@ class NewsBot(discord.Client):
             
     def normalize_title(self, title):
         """Normalize title for similarity comparison"""
-        # Convert to lowercase
         title = title.lower()
-        # Remove punctuation
         title = title.translate(str.maketrans('', '', string.punctuation))
-        # Remove extra spaces
         title = re.sub(r'\s+', ' ', title).strip()
-        # Remove common words that might cause false positives
         stop_words = {"the", "a", "an", "in", "on", "at", "to", "for", "with", "and", "but", "or"}
         words = [word for word in title.split() if word not in stop_words]
         return " ".join(words)
@@ -303,20 +280,16 @@ class NewsBot(discord.Client):
         """Check if a title is similar to any previously posted titles"""
         normalized_new = self.normalize_title(new_title)
         
-        # Clean up old titles (older than 24 hours)
         cutoff = datetime.utcnow() - timedelta(hours=24)
         expired_titles = [title for title, timestamp in self.posted_titles.items() 
                          if datetime.fromisoformat(timestamp) < cutoff]
         for title in expired_titles:
             del self.posted_titles[title]
         
-        # Check against all active titles
         for existing_title in self.posted_titles:
-            # Skip titles that are too different in length
             if abs(len(normalized_new) - len(existing_title)) > 15:
                 continue
                 
-            # Calculate similarity ratio
             seq = difflib.SequenceMatcher(None, normalized_new, existing_title)
             ratio = seq.ratio()
             
@@ -341,24 +314,18 @@ class NewsBot(discord.Client):
         if not self.summarization_enabled or not text:
             return None
             
-        # Skip if text is too short
         if len(text.split()) < 50:
             return None
             
-        # Generate summary (now 5 sentences)
         summary = self.summarizer.summarize(text)
-        
-        # Ensure summary is different from original
-        if summary and len(summary) < len(text) * 0.7:  # Summary should be significantly shorter
+        if summary and len(summary) < len(text) * 0.7:
             return summary
             
         return None
     
     def normalize_url(self, url):
         """Normalize URL to prevent duplicates"""
-        # Remove common tracking parameters
         url = re.sub(r'[\?&](utm_|source|fbclid|ref|igshid)=[^&#]+', '', url)
-        # Remove trailing slash and fragment identifiers
         url = url.rstrip('/').split('#')[0]
         return url
 
@@ -377,38 +344,101 @@ class NewsBot(discord.Client):
     def clean_html(self, text):
         """Remove HTML tags"""
         clean = re.compile('<.*?>')
-        return re.sub(clean, '', text).strip()[:1000]  # Limit to 1000 characters
+        return re.sub(clean, '', text).strip()[:1000]
     
-    def format_datetime(self, dt_str):
-        """Parse and format datetime string to user's timezone"""
+    async def get_actual_publication_time(self, url):
+        """Fetch the actual publication time from the article page"""
         try:
-            # Try RSS format first
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    soup = BeautifulSoup(html, 'html.parser')
+                    
+                    # Look for the publication time in the article
+                    time_tag = soup.find('time')
+                    if time_tag and time_tag.has_attr('datetime'):
+                        return time_tag['datetime']
+                    
+                    # Alternative location for publication time
+                    meta_published = soup.find('meta', property='article:published_time')
+                    if meta_published and meta_published.has_attr('content'):
+                        return meta_published['content']
+                    
+                    # Another possible location
+                    meta_date = soup.find('meta', property='og:article:published_time')
+                    if meta_date and meta_date.has_attr('content'):
+                        return meta_date['content']
+                    
+                    # Look for date in the content
+                    date_pattern = r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?)'
+                    match = re.search(date_pattern, html)
+                    if match:
+                        return match.group(1)
+                    
+        except Exception as e:
+            logger.error(f"Error fetching publication time: {str(e)}")
+        return None
+
+    def format_datetime(self, dt_str):
+        """Parse and convert time to user's timezone"""
+        try:
+            # First try RFC 2822 format
             dt = parsedate_to_datetime(dt_str)
         except (ValueError, TypeError):
             try:
-                # Try ISO format
+                # Then try ISO 8601 format
                 dt = datetime.fromisoformat(dt_str)
             except (ValueError, TypeError):
                 try:
-                    # Use dateutil parser as fallback
+                    # Finally use universal parser
                     dt = dateutil.parser.parse(dt_str)
                 except Exception:
-                    return dt_str  # Return original if all parsing fails
+                    # If all parsing fails, return original string
+                    if self.debug_mode:
+                        logger.warning(f"Could not parse date: {dt_str}")
+                    return dt_str
         
-        # Ensure datetime is timezone-aware
+        # Ensure datetime is in UTC
         if dt.tzinfo is None:
             dt = pytz.utc.localize(dt)
+        else:
+            dt = dt.astimezone(pytz.utc)
         
-        # Convert to user's timezone
+        # Convert to user's local timezone
         local_dt = dt.astimezone(self.timezone)
         
-        # Format with timezone abbreviation and UTC offset
+        # Get timezone abbreviation (EDT/EST)
         tz_abbr = local_dt.strftime('%Z')
-        utc_offset = local_dt.strftime('%z')
-        formatted_offset = f"{utc_offset[:3]}:{utc_offset[3:]}"
         
-        return f"{local_dt.strftime('%Y-%m-%d %H:%M:%S')} {tz_abbr} (UTC{formatted_offset})"
+        # Format: YYYY-MM-DD HH:MM:SS TZ
+        return f"{local_dt.strftime('%Y-%m-%d %H:%M:%S')} {tz_abbr}"
     
+    def is_update(self, title):
+        """Check if this article is an update to a previously posted article"""
+        normalized_new = self.normalize_title(title)
+        
+        # Look for similar titles in the past 7 days
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        
+        for existing_title, timestamp in self.posted_titles.items():
+            # Skip if too old
+            if datetime.fromisoformat(timestamp) < cutoff:
+                continue
+                
+            # Skip titles that are too different in length
+            if abs(len(normalized_new) - len(existing_title)) > 15:
+                continue
+                
+            # Calculate similarity ratio
+            seq = difflib.SequenceMatcher(None, normalized_new, existing_title)
+            ratio = seq.ratio()
+            
+            # Consider it an update if highly similar but not identical
+            if 0.7 <= ratio < 0.95:
+                return True
+                
+        return False
+
     def display_intro(self):
         """Display enhanced professional ASCII art intro with color and animations"""
         intro_art = r"""
@@ -452,7 +482,7 @@ class NewsBot(discord.Client):
         time.sleep(0.2)
         print(Fore.LIGHTCYAN_EX + f"Developed by: Jordan Ilaréguy".center(60))
         time.sleep(0.2)
-        print(Fore.LIGHTCYAN_EX + f"Version: 2.2".center(60))
+        print(Fore.LIGHTCYAN_EX + f"Version: 3.0".center(60))
         time.sleep(0.2)
         print(Fore.LIGHTCYAN_EX + f"Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}".center(60))
         time.sleep(0.2)
@@ -481,7 +511,7 @@ class NewsBot(discord.Client):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
-        timeout = aiohttp.ClientTimeout(total=20)
+        timeout = aiohttp.ClientTimeout(total=30)  # Increased timeout
         self.session = aiohttp.ClientSession(headers=headers, timeout=timeout)
         self.bg_task = self.loop.create_task(self.news_checker())
         logger.info("News bot starting...")
@@ -501,7 +531,6 @@ class NewsBot(discord.Client):
         
         while not self.is_closed():
             try:
-                # Set next fetch time
                 self.next_fetch_time = datetime.now() + timedelta(seconds=self.fetch_interval)
                 logger.info("Starting news feed check...")
                 print("\n[Status] Fetching latest news...")
@@ -538,35 +567,63 @@ class NewsBot(discord.Client):
                             logger.info(f"⏩ Skipping similar title: {title[:60]}...")
                             continue
                             
+                        # Check if this is an update to a previous article
+                        is_update = self.is_update(title)
+                        
                         # Add to posted articles
                         self.posted_articles.add(article_url)
                         normalized_title = self.normalize_title(title)
                         self.posted_titles[normalized_title] = datetime.utcnow().isoformat()
                         new_count += 1
                         
-                        # Format the message with BREAKING NEWS header
-                        message = "🚨 **BREAKING NEWS** 🚨\n\n"
+                        # Format the message
+                        if is_update:
+                            message = "🔄 **UPDATE TO PREVIOUS NEWS** 🔄\n\n"
+                        else:
+                            message = "🚨 **BREAKING NEWS** 🚨\n\n"
+                            
                         message += f"**{title}**\n\n"
                         
-                        # Add publication date with timezone conversion
-                        if 'published' in entry:
-                            pub_date = self.format_datetime(entry.published)
-                            message += f"🗓️ *Your Local Time: {pub_date}*\n\n"
-                        elif 'updated' in entry:
-                            pub_date = self.format_datetime(entry.updated)
-                            message += f"🗓️ *Your Local Time: {pub_date}*\n\n"
+                        # Get actual publication time from article page
+                        actual_pub_time = None
+                        try:
+                            actual_pub_time = await self.get_actual_publication_time(article_url)
+                            if actual_pub_time:
+                                pub_date = self.format_datetime(actual_pub_time)
+                                message += f"🗓️ *Published: {pub_date}*\n\n"
+                                
+                                # Debug log
+                                if self.debug_mode:
+                                    current_time = datetime.now(self.timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
+                                    logger.info(f"TIME DEBUG: Article: {title[:30]}... | Original: {actual_pub_time} -> Converted: {pub_date} | Current: {current_time}")
+                            else:
+                                # Fallback to RSS time if available
+                                if 'published' in entry:
+                                    pub_date_str = entry.published
+                                    pub_date = self.format_datetime(pub_date_str)
+                                    message += f"🗓️ *Published: {pub_date}*\n\n"
+                                elif 'updated' in entry:
+                                    pub_date_str = entry.updated
+                                    pub_date = self.format_datetime(pub_date_str)
+                                    message += f"🗓️ *Updated: {pub_date}*\n\n"
+                                else:
+                                    current_time = datetime.now(self.timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
+                                    message += f"🗓️ *Published: {current_time}*\n\n"
+                        except Exception as e:
+                            logger.error(f"⚠️ Time processing error: {str(e)}")
+                            current_time = datetime.now(self.timezone).strftime('%Y-%m-%d %H:%M:%S %Z')
+                            message += f"🗓️ *Published: {current_time}*\n\n"
                         
                         # Get article content
                         article_content = self.get_description(entry)
                         
-                        # Add expanded summary (5 sentences)
+                        # Add expanded summary
                         if article_content:
                             summary = self.generate_summary(article_content)
                             if summary:
                                 message += "**📝 DETAILED SUMMARY**\n"
                                 message += f"{summary}\n\n"
                             else:
-                                # Fallback to truncated description
                                 message += f"{article_content[:500]}...\n\n"
                         
                         # Add the article URL
@@ -577,31 +634,30 @@ class NewsBot(discord.Client):
                             await channel.send(message)
                             logger.info(f"✅ Posted: {title[:60]}...")
                         except discord.HTTPException as e:
-                            # Handle message length issues
                             if "Must be 2000 or fewer" in str(e):
-                                # Fallback to minimal message
-                                minimal_msg = f"🚨 **BREAKING NEWS** 🚨\n\n**{title}**\n\nRead more: {article_url}"
+                                if is_update:
+                                    minimal_msg = f"🔄 **UPDATE TO PREVIOUS NEWS** 🔄\n\n**{title}**\n\nRead more: {article_url}"
+                                else:
+                                    minimal_msg = f"🚨 **BREAKING NEWS** 🚨\n\n**{title}**\n\nRead more: {article_url}"
                                 await channel.send(minimal_msg)
                                 logger.info("✅ Posted minimal version")
                             else:
                                 logger.error(f"❌ Error sending article: {str(e)}")
                         
-                        await asyncio.sleep(2)  # Pause between articles
+                        await asyncio.sleep(3)  # Increased pause for article processing
                 
                 logger.info(f"✅ Posted {new_count} new articles total")
                 self.save_posted_articles()
                 self.save_posted_titles()
                 
-                # Print countdown to next fetch
                 logger.info(f"⏱️ Next check in {self.fetch_interval//60} minutes")
                 
-                # Dynamic countdown timer in console
                 print("\n[Status] Checking complete. Next fetch countdown:")
                 for remaining in range(self.fetch_interval, 0, -1):
                     mins, secs = divmod(remaining, 60)
                     print(f"[Countdown] Next fetch in: {mins:02d}:{secs:02d}", end='\r')
                     await asyncio.sleep(1)
-                print("\n" + "-" * 60)  # Clear the line after countdown
+                print("\n" + "-" * 60)
                 
             except Exception as e:
                 logger.error(f"⚠️ Critical error: {str(e)}", exc_info=True)
